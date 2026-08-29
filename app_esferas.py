@@ -4,10 +4,36 @@ import numpy as np
 from PIL import Image
 import io, zipfile
 
-st.set_page_config(page_title="Generador de Gajos Esféricos", layout="centered")
-st.title("🌐 Generador de Gajos para Esferas 3D")
+# Función auxiliar para convertir colores HEX a BGR (OpenCV)
+def hex_to_bgr(hex_str):
+    hex_str = hex_str.lstrip('#')
+    return tuple(int(hex_str[i:i+2], 16) for i in (4, 2, 0))
 
-# 1. Configuración de parámetros de la esfera
+st.set_page_config(page_title="Proyector Esférico - Personalizado", layout="centered", page_icon="🌐")
+
+# --- PANEL LATERAL DE PERSONALIZACIÓN ---
+st.sidebar.header("🎨 Personalización y Marca")
+estudio_nombre = st.sidebar.text_input("Nombre de tu Taller / Estudio", value="Menchaca Studio")
+logo_file = st.sidebar.file_uploader("Subir Logo (PNG/JPG)", type=["png", "jpg"])
+
+st.sidebar.markdown("---")
+st.sidebar.header("✂️ Ajustes de Líneas")
+color_corte_hex = st.sidebar.color_picker("Color de líneas de corte", "#505050")
+grosor_corte = st.sidebar.slider("Grosor de línea de corte", min_value=1, max_value=10, value=4)
+color_guia_hex = st.sidebar.color_picker("Color de guía central", "#D2D2D2")
+
+color_corte_bgr = hex_to_bgr(color_corte_hex)
+color_guia_bgr = hex_to_bgr(color_guia_hex)
+
+# --- CABECERA PERSONALIZADA ---
+if logo_file is not None:
+    logo_img = Image.open(logo_file)
+    st.image(logo_img, width=180)
+
+st.title(f"🌐 Proyector de Esferas 3D")
+st.caption(f"Herramienta desarrollada para **{estudio_nombre}**")
+
+# --- 1. PARÁMETROS DE LA ESFERA ---
 st.subheader("1. Parámetros de tu Esfera")
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -15,9 +41,9 @@ with col1:
 with col2:
     num_gores = st.number_input("Número de gajos", min_value=4, max_value=36, value=12, step=2)
 with col3:
-    dpi = st.number_input("Resolución de impresión (DPI)", min_value=72, max_value=600, value=300, step=50)
+    dpi = st.number_input("Resolución (DPI)", min_value=72, max_value=600, value=300, step=50)
 
-# 2. Cálculos teóricos del lienzo y gajos
+# Cálculos teóricos
 circunferencia_cm = np.pi * diametro_cm
 alto_lienzo_cm = (np.pi * diametro_cm) / 2.0
 ancho_gajo_cm = circunferencia_cm / num_gores
@@ -25,16 +51,13 @@ ancho_gajo_cm = circunferencia_cm / num_gores
 ancho_px = int((circunferencia_cm / 2.54) * dpi)
 alto_px = int((alto_lienzo_cm / 2.54) * dpi)
 
-# Panel con la guía de medidas sugeridas para diseñar
-st.markdown("---")
-st.subheader("📐 Medidas recomendadas para preparar tu ilustración")
-
+# Panel informativo
 st.info(f"""
-Para que tu ilustración no se deforme al envolver la esfera de **{diametro_cm} cm**, prepárala en Photoshop o Illustrator con estos valores:
-* **Ancho del lienzo:** `{circunferencia_cm:.2f} cm` ({ancho_px:,} píxeles a {dpi} DPI)
-* **Alto del lienzo:** `{alto_lienzo_cm:.2f} cm` ({alto_px:,} píxeles a {dpi} DPI)
-* **Proporción de aspecto:** `2 : 1` (el ancho siempre es el doble del alto)
-* **Medida física de cada gajo final:** `{ancho_gajo_cm:.2f} cm` de ancho máximo × `{alto_lienzo_cm:.2f} cm` de alto
+📐 **Medidas recomendadas para la ilustración ({diametro_cm} cm):**
+* **Ancho del lienzo:** `{circunferencia_cm:.2f} cm` ({ancho_px:,} px a {dpi} DPI)
+* **Alto del lienzo:** `{alto_lienzo_cm:.2f} cm` ({alto_px:,} px a {dpi} DPI)
+* **Proporción de aspecto:** `2 : 1`
+* **Gajo individual:** `{ancho_gajo_cm:.2f} cm` de ancho máx. × `{alto_lienzo_cm:.2f} cm` de alto
 """)
 
 st.markdown("---")
@@ -42,19 +65,15 @@ st.subheader("2. Cargar Ilustración")
 uploaded_file = st.file_uploader("Arrastra tu imagen (PNG o JPG)", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None:
-    # Leer datos de la imagen cargada
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img_orig = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     h_orig, w_orig = img_orig.shape[:2]
     aspect_ratio_user = w_orig / h_orig
     
-    # Verificación de proporción
     if abs(aspect_ratio_user - 2.0) > 0.1:
-        st.warning(f"⚠️ Tu imagen tiene una proporción de `{aspect_ratio_user:.2f}:1`. La app la redimensionará automáticamente a `2:1` ({ancho_px}×{alto_px} px) para adaptarse a la esfera.")
+        st.warning(f"⚠️ Proporción detectada: `{aspect_ratio_user:.2f}:1`. Se redimensionará a `2:1` ({ancho_px}×{alto_px} px).")
     else:
-        st.success(f"✅ Tu imagen tiene una proporción óptima de `{aspect_ratio_user:.2f}:1` ({w_orig}×{h_orig} px).")
-
-    st.write(f"Generando gajos en alta definición (**{ancho_px} × {alto_px} px**)...")
+        st.success(f"✅ Proporción óptima `2:1` ({w_orig}×{h_orig} px).")
 
     img_hires = cv2.resize(img_orig, (ancho_px, alto_px), interpolation=cv2.INTER_CUBIC)
     h, w = alto_px, ancho_px
@@ -90,7 +109,7 @@ if uploaded_file is not None:
             mapped = cv2.remap(img_hires, x_in, y_in, cv2.INTER_LANCZOS4)
             gore_img[mask] = mapped[mask]
             
-            # Trazado de contornos
+            # Trazado con colores dinámicos elegidos en el menú
             xl_local = (cx - (gore_w / 2.0) * cos_pts) - x_start
             xr_local = (cx + (gore_w / 2.0) * cos_pts) - x_start
             cx_local = cx - x_start
@@ -98,11 +117,10 @@ if uploaded_file is not None:
             pts_left = np.column_stack((xl_local, y_pts)).astype(np.int32)
             pts_right = np.column_stack((xr_local, y_pts)).astype(np.int32)
             
-            cv2.polylines(gore_img, [pts_left], False, (80, 80, 80), 4, cv2.LINE_AA)
-            cv2.polylines(gore_img, [pts_right], False, (80, 80, 80), 4, cv2.LINE_AA)
-            cv2.line(gore_img, (int(cx_local), 0), (int(cx_local), h), (210, 210, 210), 2)
+            cv2.polylines(gore_img, [pts_left], False, color_corte_bgr, grosor_corte, cv2.LINE_AA)
+            cv2.polylines(gore_img, [pts_right], False, color_corte_bgr, grosor_corte, cv2.LINE_AA)
+            cv2.line(gore_img, (int(cx_local), 0), (int(cx_local), h), color_guia_bgr, 2)
             
-            # Guardado con metadatos de DPI
             gore_rgb = cv2.cvtColor(gore_img, cv2.COLOR_BGR2RGB)
             pil_img = Image.fromarray(gore_rgb)
             
@@ -112,9 +130,9 @@ if uploaded_file is not None:
             zip_file.writestr(f"gajo_{i+1:02d}.png", img_byte_arr.getvalue())
             progress_bar.progress((i + 1) / num_gores)
 
-    st.success("🎉 ¡Todos los gajos han sido calculados con éxito!")
+    st.success("🎉 ¡Proceso finalizado!")
     st.download_button(
-        label="📦 Descargar paquete de gajos (ZIP)",
+        label="📦 Descargar gajos (ZIP)",
         data=zip_buffer.getvalue(),
         file_name=f"gajos_esfera_{diametro_cm}cm.zip",
         mime="application/zip"
