@@ -4,12 +4,11 @@ import numpy as np
 from PIL import Image
 import io, zipfile
 
-# Función auxiliar para convertir colores HEX a BGR (OpenCV)
 def hex_to_bgr(hex_str):
     hex_str = hex_str.lstrip('#')
     return tuple(int(hex_str[i:i+2], 16) for i in (4, 2, 0))
 
-st.set_page_config(page_title="Proyector Esférico - Personalizado", layout="centered", page_icon="🌐")
+st.set_page_config(page_title="Proyector Esférico", layout="centered", page_icon="🌐")
 
 # --- PANEL LATERAL DE PERSONALIZACIÓN ---
 st.sidebar.header("🎨 Personalización y Marca")
@@ -20,17 +19,21 @@ st.sidebar.markdown("---")
 st.sidebar.header("✂️ Ajustes de Líneas")
 color_corte_hex = st.sidebar.color_picker("Color de líneas de corte", "#505050")
 grosor_corte = st.sidebar.slider("Grosor de línea de corte", min_value=1, max_value=10, value=4)
-color_guia_hex = st.sidebar.color_picker("Color de guía central", "#D2D2D2")
+
+# Casilla opcional para la guía central (Desactivada por defecto)
+mostrar_guia_central = st.sidebar.checkbox("Mostrar línea guía central", value=False)
+if mostrar_guia_central:
+    color_guia_hex = st.sidebar.color_picker("Color de guía central", "#D2D2D2")
+    color_guia_bgr = hex_to_bgr(color_guia_hex)
 
 color_corte_bgr = hex_to_bgr(color_corte_hex)
-color_guia_bgr = hex_to_bgr(color_guia_hex)
 
-# --- CABECERA PERSONALIZADA ---
+# --- CABECERA ---
 if logo_file is not None:
     logo_img = Image.open(logo_file)
     st.image(logo_img, width=180)
 
-st.title(f"🌐 Proyector de Esferas 3D")
+st.title("🌐 Proyector de Esferas 3D")
 st.caption(f"Herramienta desarrollada para **{estudio_nombre}**")
 
 # --- 1. PARÁMETROS DE LA ESFERA ---
@@ -43,7 +46,7 @@ with col2:
 with col3:
     dpi = st.number_input("Resolución (DPI)", min_value=72, max_value=600, value=300, step=50)
 
-# Cálculos teóricos
+# Cálculos
 circunferencia_cm = np.pi * diametro_cm
 alto_lienzo_cm = (np.pi * diametro_cm) / 2.0
 ancho_gajo_cm = circunferencia_cm / num_gores
@@ -51,7 +54,6 @@ ancho_gajo_cm = circunferencia_cm / num_gores
 ancho_px = int((circunferencia_cm / 2.54) * dpi)
 alto_px = int((alto_lienzo_cm / 2.54) * dpi)
 
-# Panel informativo
 st.info(f"""
 📐 **Medidas recomendadas para la ilustración ({diametro_cm} cm):**
 * **Ancho del lienzo:** `{circunferencia_cm:.2f} cm` ({ancho_px:,} px a {dpi} DPI)
@@ -109,7 +111,7 @@ if uploaded_file is not None:
             mapped = cv2.remap(img_hires, x_in, y_in, cv2.INTER_LANCZOS4)
             gore_img[mask] = mapped[mask]
             
-            # Trazado con colores dinámicos elegidos en el menú
+            # Trazado del contorno exterior
             xl_local = (cx - (gore_w / 2.0) * cos_pts) - x_start
             xr_local = (cx + (gore_w / 2.0) * cos_pts) - x_start
             cx_local = cx - x_start
@@ -119,7 +121,10 @@ if uploaded_file is not None:
             
             cv2.polylines(gore_img, [pts_left], False, color_corte_bgr, grosor_corte, cv2.LINE_AA)
             cv2.polylines(gore_img, [pts_right], False, color_corte_bgr, grosor_corte, cv2.LINE_AA)
-            cv2.line(gore_img, (int(cx_local), 0), (int(cx_local), h), color_guia_bgr, 2)
+            
+            # Dibujar la línea central únicamente si la casilla del menú está activada
+            if mostrar_guia_central:
+                cv2.line(gore_img, (int(cx_local), 0), (int(cx_local), h), color_guia_bgr, 2)
             
             gore_rgb = cv2.cvtColor(gore_img, cv2.COLOR_BGR2RGB)
             pil_img = Image.fromarray(gore_rgb)
